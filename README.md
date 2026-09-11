@@ -31,6 +31,48 @@ O Estoque Congregacional apoiará uma única igreja no controle de produtos de l
 - Múltiplas igrejas na mesma instalação.
 - Alertas por e-mail, SMS ou aplicativos de mensagens.
 
+### Nível da visão e limite do sistema
+
+A documentação apresenta uma visão estrutural de **containers inspirada no modelo C4** e uma visão comportamental da jornada crítica de saída de estoque. O diagrama de implantação complementa essas visões sem misturar serviços de nuvem com containers lógicos.
+
+O limite lógico do Estoque Congregacional contém a SPA, o Backend for Frontend (BFF) com a API de negócio, o store de sessões e o banco de estoque. Cognito, Secrets Manager e CloudWatch são serviços gerenciados tratados como dependências externas ao limite da aplicação.
+
+### Responsabilidades e integrações
+
+| Elemento | Responsabilidade principal | Limite explícito |
+| --- | --- | --- |
+| SPA executada no navegador | Apresentar telas e realizar validações de conveniência | Não recebe JWT, segredo nem aplica a regra final de estoque |
+| BFF e API de Estoque | Executar OAuth, controlar sessões, autorizar papéis e executar casos de uso | Não coleta senha nem entrega tokens ao frontend |
+| Store de Sessões | Manter sessões opacas, expiração e revogação | Não armazena o histórico funcional do estoque |
+| Banco de Estoque | Persistir produtos, saldos, movimentações e idempotência | Não decide regras de negócio |
+| Amazon Cognito | Autenticar usuários e emitir tokens ao BFF | Não autoriza sozinho as operações do domínio |
+| AWS Secrets Manager | Proteger o `client_secret` acessado pelo papel IAM do BFF | Nunca entrega segredo ao navegador |
+| CloudFront e API Gateway | Distribuir a SPA, terminar HTTPS e encaminhar `/auth` e `/api` | Não executam regras de estoque nesta baseline |
+| Amazon CloudWatch | Receber logs, métricas e alarmes | Não substitui o histórico auditável de movimentações |
+
+As integrações externas propostas são: OpenID Connect/OAuth 2.0 com Cognito, leitura do segredo por API autenticada com IAM, acesso transacional ao DynamoDB e publicação de telemetria no CloudWatch. Não há integração com fornecedores, ERP ou canais de notificação nesta fase.
+
+### Restrições e lacunas do discovery
+
+Restrições já estabelecidas:
+
+- primeira versão destinada a uma única igreja e dependente de conexão com a internet;
+- saldo nunca negativo e movimentações imutáveis, atômicas e idempotentes;
+- nenhuma senha, credencial AWS, `client_secret` ou JWT disponível ao frontend;
+- contratos HTTP e schemas independentes do runtime escolhido;
+- tecnologias AWS permanecem propostas até o aceite dos ADRs.
+
+Lacunas que um agente não pode completar por conta própria:
+
+- confirmar os papéis, permissões e campos definitivos dos produtos;
+- escolher Node.js com TypeScript ou Python para o backend;
+- definir volume, orçamento, região AWS e requisitos de residência de dados;
+- definir disponibilidade, recuperação, backup e retenção;
+- definir duração, renovação e revogação das sessões, rotação do segredo e chave KMS;
+- decidir unicidade do produto, uso de código de barras e regra de estorno de movimentações.
+
+O detalhamento e as demais perguntas estão em [`docs/discovery/open-questions.md`](docs/discovery/open-questions.md).
+
 ### Regras invariantes
 
 1. O saldo de um produto nunca pode ficar negativo.
