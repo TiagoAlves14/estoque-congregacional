@@ -51,6 +51,10 @@ def validate_yaml() -> tuple[int, dict[str, Any]]:
         fail("docs/openapi.yaml must use OpenAPI 3.1.0")
 
     expected_operations = {
+        "beginLogin",
+        "completeLogin",
+        "getSession",
+        "endSession",
         "listProducts",
         "createProduct",
         "getProduct",
@@ -67,6 +71,32 @@ def validate_yaml() -> tuple[int, dict[str, Any]]:
     missing = expected_operations - found_operations
     if missing:
         fail(f"OpenAPI operations missing: {sorted(missing)}")
+
+    if spec.get("security") != [{"cookieAuth": []}]:
+        fail("OpenAPI must use the opaque BFF cookie as its global security scheme")
+
+    schemes = spec.get("components", {}).get("securitySchemes", {})
+    cookie_scheme = schemes.get("cookieAuth", {})
+    if cookie_scheme.get("in") != "cookie" or cookie_scheme.get("name") != "__Host-ec_session":
+        fail("cookieAuth must use the __Host-ec_session cookie")
+    if "bearerAuth" in schemes:
+        fail("The browser-facing OpenAPI must not expose bearer JWT authentication")
+
+    for path_name in ("/auth/login", "/auth/callback"):
+        if spec["paths"][path_name]["get"].get("security") != []:
+            fail("Login start and callback must explicitly disable global cookie auth")
+
+    csrf_ref = "#/components/parameters/CsrfToken"
+    csrf_operations = [
+        ("/auth/session", "delete"),
+        ("/api/products", "post"),
+        ("/api/products/{productId}", "patch"),
+        ("/api/products/{productId}/movements", "post"),
+    ]
+    for path_name, method in csrf_operations:
+        parameters = spec["paths"][path_name][method].get("parameters", [])
+        if not any(parameter.get("$ref") == csrf_ref for parameter in parameters):
+            fail(f"Missing CSRF protection in {method.upper()} {path_name}")
 
     for ref in walk_values(spec):
         if isinstance(ref, str) and ref.startswith("./"):
@@ -122,8 +152,8 @@ def validate_mermaid() -> int:
 
 def validate_adrs() -> int:
     paths = sorted((DOCS / "decisions").glob("ADR-*.md"))
-    if len(paths) < 4:
-        fail("At least four proposed ADRs are expected")
+    if len(paths) < 5:
+        fail("At least five proposed ADRs are expected")
     for path in paths:
         text = path.read_text(encoding="utf-8")
         if "**Status:** Proposto" not in text:
@@ -151,4 +181,3 @@ if __name__ == "__main__":
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as error:
         print(f"Architecture validation failed: {error}", file=sys.stderr)
         sys.exit(1)
-

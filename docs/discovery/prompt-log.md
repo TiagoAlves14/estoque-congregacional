@@ -49,3 +49,21 @@ o que um agente de desenvolvimento ainda precisaria perguntar antes de implement
 - A baseline AWS foi registrada como proposta, não como fato.
 - Perguntas sem resposta permaneceram visíveis em [`open-questions.md`](open-questions.md).
 
+## 5. Revisão de segurança e de tecnologia
+
+```text
+Revise a autenticação considerando que o frontend não pode armazenar client_secret,
+credenciais AWS nem JWT. Use Secrets Manager apenas no backend e represente uma
+alternativa segura com BFF, sessão opaca em cookie HttpOnly e proteção CSRF.
+
+Revise também o rótulo TypeScript: explique a diferença entre linguagem e runtime,
+compare Node.js com TypeScript e Python sem escolher por inferência e atualize os
+diagramas, referências, contrato e decisões.
+```
+
+### Ajustes resultantes
+
+- A SPA deixou de ser cliente OAuth e passou a usar sessão opaca mediada por BFF.
+- JWTs e `client_secret` ficaram restritos ao backend.
+- Secrets Manager, store de sessões, CSRF e ciclo de autenticação foram documentados.
+- TypeScript deixou de ser baseline; a escolha entre Node.js com TypeScript e Python virou uma pergunta e um ADR.

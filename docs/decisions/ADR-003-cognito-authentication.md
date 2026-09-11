@@ -1,4 +1,4 @@
-# ADR-003 — Autenticação com Amazon Cognito
+# ADR-003 — Autenticação com Cognito por meio de BFF
 
 - **Status:** Proposto
 - **Data:** 2026-09-11
@@ -6,52 +6,57 @@
 
 ## Contexto
 
-O sistema exige usuários autorizados e dois papéis iniciais. A aplicação web não deve manipular senhas nem expor credenciais para a API.
+O sistema exige usuários autorizados e dois papéis iniciais. A revisão de segurança definiu uma restrição mais forte do que a proposta inicial: nem tokens OAuth nem segredos podem ser entregues ao JavaScript executado no navegador.
+
+Uma SPA é um cliente público e não consegue preservar um `client_secret`. O `client_id` identifica o cliente, mas não é segredo. Guardar um `client_secret` no bundle, em variável de ambiente incorporada no build ou buscá-lo do Secrets Manager e devolvê-lo ao navegador apenas deslocaria a exposição; não resolveria o risco.
 
 ## Decisão proposta
 
-Usar Amazon Cognito User Pool com:
+Usar Amazon Cognito User Pool atrás de um **Backend for Frontend (BFF)**:
 
-- Cognito Managed Login para coletar a credencial do usuário fora da SPA;
-- app client do tipo público e sem `client_secret` (`GenerateSecret=false`);
-- Authorization Code com Proof Key for Code Exchange (PKCE);
-- grupos `ADMIN` e `OPERATOR` como baseline de autorização;
-- tokens de acesso de curta duração;
-- validação de emissor, audiência e expiração pelo autorizador JWT do API Gateway;
-- nenhuma persistência de tokens em `localStorage`;
-- aplicação de negócio autorizando a operação a partir de claims validadas, sem depender de detalhes internos do Cognito.
+- o Cognito Managed Login coleta a senha fora da SPA;
+- o BFF atua como cliente OAuth confidencial e usa Authorization Code com PKCE;
+- o `client_secret` fica no AWS Secrets Manager e só pode ser lido pelo papel IAM do BFF;
+- `state`, `nonce`, `code_verifier` e a transação de login são gerados e validados pelo BFF;
+- o Cognito emite os tokens ao BFF, que valida assinatura, emissor, audiência, expiração e `nonce`;
+- access e refresh tokens ficam exclusivamente no servidor, associados a uma sessão com expiração e revogação;
+- o navegador recebe apenas um identificador opaco e aleatório no cookie `__Host-ec_session`, com `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/` e sem atributo `Domain`;
+- a SPA chama o BFF no mesmo domínio; requisições que alteram estado exigem proteção CSRF adicional, incluindo token vinculado à sessão e validação de origem;
+- grupos `ADMIN` e `OPERATOR` permanecem uma baseline de autorização a validar;
+- o BFF autoriza cada caso de uso com a identidade resolvida da sessão; o API Gateway apenas roteia a requisição.
 
-O frontend **não gera nem assina JWTs**. A SPA gera somente um `code_verifier` aleatório e seu `code_challenge` para a transação PKCE. Após o login, o Cognito devolve um código de autorização; a SPA apresenta o código e o verificador ao token endpoint, e o Cognito emite os tokens.
-
-O `client_id`, a URL do User Pool, os escopos e as URLs de callback são configurações públicas. Nenhuma chave de acesso AWS ou segredo do app client pode fazer parte do bundle JavaScript.
-
-Como a SPA precisa apresentar o access token à API, código JavaScript malicioso no mesmo contexto poderia roubá-lo. A baseline reduz esse risco com armazenamento somente em memória, Content Security Policy e vida curta do token. Se o negócio exigir sessão persistente ou proteção mais forte contra exposição do token no navegador, deve ser avaliado um Backend for Frontend (BFF), com tokens no servidor e cookie `HttpOnly`, `Secure` e `SameSite`.
+O frontend **não gera, assina, armazena nem recebe JWTs**. Também não acessa o Secrets Manager. O BFF pode usar a extensão de cache do Secrets Manager para reduzir chamadas, mas deve respeitar rotação, menor privilégio e falha fechada.
 
 ## Alternativas consideradas
 
-1. Autenticação própria: rejeitada como baseline pelo risco e custo de manter credenciais.
-2. Outro provedor OpenID Connect: tecnicamente válido e preservado como alternativa se houver identidade já disponível.
-3. Backend for Frontend com cookies HttpOnly: oferece melhor controle de sessão, mas adiciona um container e fluxo ainda não justificados para este escopo.
+1. SPA como cliente público, sem segredo, usando Authorization Code com PKCE: é um fluxo válido, mas deixa tokens acessíveis ao contexto do navegador e não atende à restrição de segurança escolhida.
+2. Autenticação própria: rejeitada como baseline pelo risco e custo de manter credenciais.
+3. Outro provedor OpenID Connect: tecnicamente válido se já houver uma identidade corporativa disponível.
 
 ## Consequências
 
 ### Positivas
 
-- Credenciais ficam sob serviço gerenciado.
-- Integração direta com API Gateway.
-- Fluxo adequado para cliente público usando PKCE.
+- Senhas ficam sob serviço gerenciado.
+- Tokens e `client_secret` não ficam expostos ao JavaScript do navegador.
+- A sessão pode ser revogada no servidor.
+- O mesmo domínio reduz a superfície de CORS e permite cookies com atributos restritivos.
 
 ### Negativas e riscos
 
 - Dependência de fornecedor.
-- Estratégia exata de renovação e encerramento de sessão precisa ser detalhada.
+- O BFF e o store de sessão aumentam a complexidade e o custo em comparação com uma SPA puramente estática.
+- Estratégia exata de renovação, expiração e encerramento de sessão precisa ser detalhada.
+- Autenticação por cookie exige defesa explícita contra Cross-Site Request Forgery (CSRF).
 - Papéis e duração dos tokens ainda necessitam validação.
-- Uma SPA continua exposta a roubo de token em caso de Cross-Site Scripting (XSS); PKCE não elimina esse risco.
+- Cross-Site Scripting (XSS) ainda pode executar ações em nome do usuário, embora não consiga ler o cookie `HttpOnly`; CSP e prevenção de injeção continuam necessárias.
 
 ## Critérios para aceite
 
 - Papéis confirmados pelo responsável funcional.
-- Política de sessão e recuperação de conta definida.
+- Tempos absoluto e ocioso da sessão, renovação e revogação definidos.
+- Estratégia CSRF testada.
+- Rotação do segredo e permissões IAM revisadas.
 - Threat model revisado.
 - Experiência de login validada.
 
@@ -59,4 +64,6 @@ Como a SPA precisa apresentar o access token à API, código JavaScript malicios
 
 - [AWS — Tipos de app client do Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-client-apps.html)
 - [AWS — OAuth 2.0 grants e PKCE no Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/federation-endpoints-oauth-grants.html)
-- [AWS — Autorizador JWT do API Gateway](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api-jwt-authorizer.html)
+- [AWS — Recuperação de segredos por funções Lambda](https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieving-secrets_lambda.html)
+- [AWS — Práticas recomendadas do Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/best-practices.html)
+- [IETF RFC 10017 — OAuth 2.0 for Browser-Based Applications](https://datatracker.ietf.org/doc/rfc10017/)

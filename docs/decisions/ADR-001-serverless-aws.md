@@ -13,9 +13,12 @@ O sistema atenderá inicialmente uma única igreja, com equipe pequena e volume 
 Adotar:
 
 - React SPA hospedada em Amazon S3 e distribuída pelo Amazon CloudFront;
-- Amazon API Gateway HTTP API como entrada protegida;
-- uma aplicação TypeScript em AWS Lambda, organizada como monólito modular;
-- Amazon DynamoDB para persistência;
+- uma distribuição CloudFront com o mesmo domínio para arquivos estáticos, `/auth` e `/api`;
+- Amazon API Gateway HTTP API como entrada e roteador, sem expor JWT ao navegador;
+- um Backend for Frontend (BFF) e a aplicação de estoque na mesma unidade AWS Lambda, organizada como monólito modular;
+- runtime do backend pendente entre Node.js com TypeScript e Python, conforme o ADR-005;
+- Amazon DynamoDB para dados de estoque e um store isolado de sessões com Time to Live (TTL);
+- AWS Secrets Manager para o `client_secret` do cliente confidencial do Cognito;
 - Amazon CloudWatch para logs, métricas e alarmes;
 - infraestrutura declarada futuramente como código.
 
@@ -35,12 +38,14 @@ A região AWS permanece em aberto. `sa-east-1` é apenas uma hipótese a avaliar
 - Escala sob demanda.
 - Cobrança proporcional ao uso em cargas pequenas.
 - Uma unidade de backend simples de implantar e testar.
+- Tokens OAuth permanecem no servidor, com uma fronteira de confiança clara para o navegador.
 
 ### Negativas e riscos
 
 - Acoplamento a serviços AWS.
 - Latência de inicialização da Lambda em alguns cenários.
 - Custos podem crescer de forma não linear sem orçamento e métricas.
+- O BFF passa a manter estado de sessão e exige proteção contra CSRF, rotação e revogação.
 - Região, recuperação, limites de serviço e observabilidade ainda precisam ser definidos.
 
 ## Critérios para aceite
@@ -49,4 +54,4 @@ A região AWS permanece em aberto. `sa-east-1` é apenas uma hipótese a avaliar
 - Região escolhida.
 - Objetivos de disponibilidade e recuperação definidos.
 - Comparação de custo com pelo menos uma alternativa.
-
+- Runtime do backend e política de sessão aprovados.

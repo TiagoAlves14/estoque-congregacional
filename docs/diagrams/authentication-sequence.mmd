@@ -1,0 +1,25 @@
+sequenceDiagram
+    autonumber
+    participant Web as Navegador e SPA
+    participant BFF as BFF de autenticação
+    participant Secrets as AWS Secrets Manager
+    participant Cognito as Cognito Managed Login
+    participant Sessao as Store de Sessões
+
+    Web->>BFF: GET /auth/login
+    BFF->>Secrets: Obtém client_secret ou usa cache controlado
+    Secrets-->>BFF: Segredo para o cliente confidencial
+    BFF->>BFF: Gera state, nonce, code_verifier e code_challenge
+    BFF->>Sessao: Salva transação de login com expiração curta
+    BFF-->>Web: 302 para Cognito com state e code_challenge
+    Web->>Cognito: Usuário informa credenciais no Managed Login
+    Cognito-->>Web: 302 para /auth/callback com code e state
+    Web->>BFF: GET /auth/callback?code=...&state=...
+    BFF->>Sessao: Recupera e consome a transação de login
+    BFF->>BFF: Valida state e recupera code_verifier e nonce
+    BFF->>Cognito: Troca code + code_verifier autenticando o cliente
+    Cognito-->>BFF: ID, access e refresh tokens
+    BFF->>BFF: Valida assinatura, emissor, audiência, expiração e nonce
+    BFF->>Sessao: Cria sessão opaca e guarda tokens somente no servidor
+    BFF-->>Web: 302 para a aplicação + Set-Cookie __Host-ec_session<br/>Secure; HttpOnly; SameSite=Strict; Path=/
+    Note over Web: A SPA nunca recebe JWT nem client_secret

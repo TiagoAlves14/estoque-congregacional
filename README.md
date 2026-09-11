@@ -38,18 +38,27 @@ O Estoque Congregacional apoiará uma única igreja no controle de produtos de l
 3. Alteração de saldo, criação da movimentação e registro de idempotência devem ser atômicos.
 4. Uma repetição com a mesma chave de idempotência e o mesmo conteúdo não pode duplicar o efeito.
 5. Uma mesma chave de idempotência com conteúdo diferente deve ser rejeitada.
+6. O frontend não pode receber JWT, `client_secret` ou credenciais AWS.
+7. Operações autenticadas por cookie que alteram estado devem validar proteção CSRF.
 
 ## Baseline arquitetural proposta
 
 | Responsabilidade | Solução proposta | Situação |
 | --- | --- | --- |
 | Interface web | SPA React em Amazon S3 e CloudFront | Proposta no ADR-001 |
-| Identidade | Amazon Cognito com Authorization Code e PKCE | Proposta no ADR-003 |
-| Entrada HTTP | Amazon API Gateway HTTP API com autorizador JWT | Proposta no ADR-001 |
-| Regras de negócio | Aplicação TypeScript em AWS Lambda, organizada como monólito modular | Proposta no ADR-001 |
+| Identidade | Cognito com Authorization Code e PKCE, acessado por BFF confidencial | Proposta no ADR-003 |
+| Sessão do navegador | Cookie opaco `Secure`, `HttpOnly` e `SameSite=Strict`; tokens no servidor | Proposta no ADR-003 |
+| Gestão de segredos | `client_secret` no AWS Secrets Manager, acessível somente pelo BFF | Proposta no ADR-003 |
+| Entrada HTTP | CloudFront no mesmo domínio e API Gateway apenas como roteador | Proposta no ADR-001 |
+| BFF e regras de negócio | Monólito modular em AWS Lambda; runtime ainda não escolhido | ADR-001 e ADR-005 |
 | Persistência | Amazon DynamoDB com single-table design | Proposta no ADR-002 |
+| Sessões | Store DynamoDB isolado, com expiração, revogação e TTL | Proposta no ADR-003 |
 | Consistência de movimentações | Transação, condição de saldo e chave de idempotência | Proposta no ADR-004 |
 | Observabilidade | Logs, métricas e alarmes no Amazon CloudWatch | Proposta no ADR-001 |
+
+### TypeScript, Node.js ou Python?
+
+TypeScript e Node.js não são escolhas equivalentes: **TypeScript é uma linguagem** que normalmente é compilada para JavaScript; **Node.js é o runtime** que executa esse JavaScript. A comparação adequada é “Node.js com TypeScript” versus “Python”. Como o discovery não informou experiência da equipe nem restrições de runtime, a arquitetura não escolhe nenhuma das duas. A decisão e seus critérios estão no [ADR-005](docs/decisions/ADR-005-backend-runtime.md).
 
 ## Diagrama estrutural — visão de containers
 
@@ -59,25 +68,32 @@ O desenho mantém o nível de containers inspirado no C4. Serviços gerenciados 
 flowchart TB
     usuario["Responsável pelo estoque"]
     cognito["Provedor de Identidade — Amazon Cognito — externo"]
+    segredos["Cofre de Segredos — AWS Secrets Manager — externo"]
     observabilidade["Plataforma de Observabilidade — Amazon CloudWatch — externo"]
 
     subgraph sistema["Estoque Congregacional"]
         web["Aplicação Web — React SPA executada no navegador"]
-        api["API de Estoque — aplicação TypeScript"]
+        backend["BFF e API de Estoque — runtime a definir"]
+        sessoes[("Store de Sessões — DynamoDB")]
         banco[("Banco de Dados de Estoque — DynamoDB")]
     end
 
     usuario -->|Usa pelo navegador| web
-    web -->|Inicia autenticação OIDC com PKCE| cognito
-    web -->|Consome via HTTPS e JSON com access token| api
-    api -.->|Confia em tokens emitidos por| cognito
-    api -->|Lê e grava dados| banco
-    api -->|Publica métricas e logs| observabilidade
+    usuario -.->|Informa credenciais somente no Managed Login| cognito
+    web -->|HTTPS no mesmo domínio; navegador envia cookie HttpOnly| backend
+    backend -->|Authorization Code com PKCE| cognito
+    cognito -->|Emite tokens somente ao backend| backend
+    backend -->|Lê client_secret com IAM restrito| segredos
+    backend -->|Cria e valida sessão opaca| sessoes
+    backend -->|Lê e grava dados de estoque| banco
+    backend -->|Publica métricas e logs| observabilidade
 ```
 
 Fonte versionada: [`docs/diagrams/containers.mmd`](docs/diagrams/containers.mmd).
 
-> **Erro identificado na revisão:** a primeira versão dizia que o usuário “usa via HTTPS”. Isso misturava a interação humana com um protocolo entre componentes. O correto é o usuário usar a aplicação pelo navegador; a SPA executada no navegador é que consome a API via HTTPS. A infraestrutura física foi separada no [diagrama de implantação](docs/diagrams/deployment.mmd).
+> **Erros identificados na revisão:** a primeira versão dizia que o usuário “usa via HTTPS”, deixava ambíguo quem gerava o JWT e escolhia TypeScript sem evidência. Uma revisão intermediária ainda mantinha o access token no navegador. O fluxo final representa a pessoa usando a aplicação, o BFF recebendo tokens do Cognito, o Secrets Manager acessível somente pelo backend e o runtime como decisão pendente. O histórico completo está no [registro de inferências](docs/discovery/inferences.md).
+
+O fluxo de login detalhado está no [diagrama de sequência de autenticação](docs/diagrams/authentication-sequence.mmd). Ele deixa explícito que o usuário digita a senha somente no Cognito, o BFF lê o `client_secret`, valida OAuth e devolve ao navegador apenas uma sessão opaca.
 
 ## Diagrama comportamental — registro de saída
 
@@ -87,36 +103,45 @@ A jornada crítica considera o usuário autenticado e apresenta repetição idem
 sequenceDiagram
     autonumber
     actor Usuario as Responsável pelo estoque
-    participant Web as Aplicação Web
-    participant API as API Gateway
-    participant App as Aplicação de Estoque
-    participant DB as DynamoDB
+    participant Web as Navegador e SPA
+    participant BFF as BFF e API de Estoque
+    participant Sessao as Store de Sessões
+    participant Estoque as Banco de Estoque
 
     Usuario->>Web: Informa produto, quantidade e motivo
-    Web->>API: POST movimentação com JWT e Idempotency-Key
-    API->>API: Valida JWT e autorização
-    API->>App: Encaminha requisição autorizada
-    App->>DB: Consulta chave de idempotência
+    Web->>BFF: POST /api/.../movements via HTTPS<br/>cookie opaco + X-CSRF-Token + Idempotency-Key
+    BFF->>BFF: Valida origem e proteção CSRF
+    BFF->>Sessao: Busca hash do identificador da sessão
 
-    alt Requisição já processada com o mesmo conteúdo
-        DB-->>App: Retorna resultado armazenado
-        App-->>Web: Repete a resposta sem nova baixa
-    else Nova requisição
-        App->>DB: Lê produto com consistência forte
-        DB-->>App: Retorna saldo e versão
-        App->>DB: Transação: atualiza saldo, cria movimento e idempotência
-        alt Saldo suficiente e versão atual
-            DB-->>App: Confirma transação
-            App-->>Web: 201 — saída registrada
-            Web-->>Usuario: Exibe novo saldo
-        else Saldo insuficiente
-            DB-->>App: Cancela transação
-            App-->>Web: 409 — saldo insuficiente
-            Web-->>Usuario: Exibe erro sem alterar o estoque
-        else Versão alterada por operação concorrente
-            DB-->>App: Cancela transação
-            App-->>Web: 409 — conflito de concorrência
-            Web-->>Usuario: Solicita nova tentativa
+    alt Sessão ausente, expirada ou revogada
+        Sessao-->>BFF: Sessão inválida
+        BFF-->>Web: 401 — autenticação necessária
+        Web-->>Usuario: Solicita novo login
+    else Sessão válida
+        Sessao-->>BFF: Retorna actorId, papéis e expiração
+        BFF->>BFF: Autoriza ADMIN ou OPERATOR
+        BFF->>Estoque: Consulta chave de idempotência
+
+        alt Requisição já processada com o mesmo conteúdo
+            Estoque-->>BFF: Retorna resultado armazenado
+            BFF-->>Web: Repete a resposta sem nova baixa
+        else Nova requisição
+            BFF->>Estoque: Lê produto com consistência forte
+            Estoque-->>BFF: Retorna saldo e versão
+            BFF->>Estoque: Transação: atualiza saldo, cria movimento e idempotência
+            alt Saldo suficiente e versão atual
+                Estoque-->>BFF: Confirma transação
+                BFF-->>Web: 201 — saída registrada
+                Web-->>Usuario: Exibe novo saldo
+            else Saldo insuficiente
+                Estoque-->>BFF: Cancela transação
+                BFF-->>Web: 409 — saldo insuficiente
+                Web-->>Usuario: Exibe erro sem alterar o estoque
+            else Versão alterada por operação concorrente
+                Estoque-->>BFF: Cancela transação
+                BFF-->>Web: 409 — conflito de concorrência
+                Web-->>Usuario: Solicita nova tentativa
+            end
         end
     end
 ```
@@ -130,10 +155,12 @@ A distinção entre fatos, inferências, decisões propostas, ajustes e lacunas 
 Em resumo:
 
 - O modelo inferiu corretamente a separação entre interface, regras e persistência, a necessidade de autenticação e o risco de saldo insuficiente.
-- O modelo errou ao associar `HTTPS` diretamente à ação do usuário e deixou ambíguo quem emitia o JWT; ambos os pontos foram corrigidos e registrados.
+- O modelo errou ao associar `HTTPS` à ação humana, deixou ambíguo quem emitia o JWT e tratou TypeScript como decisão de plataforma; os pontos foram corrigidos e registrados.
+- O fluxo SPA + PKCE sugerido na revisão intermediária era tecnicamente válido para cliente público, mas não atendia à restrição posterior de manter JWT fora do navegador; por isso foi substituído por BFF.
+- O `client_id` foi corretamente classificado como identificador público; o `client_secret` passou a existir somente no Secrets Manager e no backend.
 - A revisão limitou a solução a uma única API modular, retirou notificações externas e tornou explícita a atomicidade da movimentação.
-- AWS, React, Cognito, Lambda, DynamoDB e idempotência foram convertidos em decisões propostas e documentados em ADRs, em vez de serem tratados como fatos.
-- Ainda faltam validação de volume, objetivos de disponibilidade, orçamento, retenção e aceite formal dos ADRs.
+- AWS, React, Cognito, Lambda, DynamoDB, BFF e idempotência foram convertidos em decisões propostas e documentados em ADRs, em vez de serem tratados como fatos.
+- Ainda faltam escolha do runtime, política de sessão e rotação, validação de volume, disponibilidade, orçamento, retenção e aceite formal dos ADRs.
 
 ## Organização do repositório
 
@@ -165,11 +192,13 @@ Em resumo:
 - [Lacunas e perguntas em aberto](docs/discovery/open-questions.md)
 - [Contexto para agentes](docs/agent-context.md)
 - [Diagrama de implantação AWS](docs/diagrams/deployment.mmd)
+- [Sequência de autenticação BFF](docs/diagrams/authentication-sequence.mmd)
 - [Contrato OpenAPI](docs/openapi.yaml)
 - [Modelo DynamoDB](docs/dynamodb/data-model.md)
 - [Padrões de acesso](docs/dynamodb/access-patterns.md)
 - [Transação e idempotência](docs/dynamodb/transaction-spec.md)
 - [Segurança e observabilidade](docs/security/security-and-observability.md)
+- [Modelo de sessão do BFF](docs/security/session-management.md)
 - [Cenários de aceitação](docs/tests/acceptance-scenarios.md)
 - [Matriz de rastreabilidade](docs/mapping/traceability.md)
 - [ADRs propostos](docs/decisions/)

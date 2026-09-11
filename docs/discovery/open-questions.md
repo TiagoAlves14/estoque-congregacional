@@ -14,6 +14,9 @@
 | Q-10 | É permitido corrigir uma movimentação por estorno lógico? | Define um novo tipo de movimento e regras de auditoria. | Sim |
 | Q-11 | O histórico será consultado apenas por produto ou também globalmente por período? | Pode exigir um novo índice secundário global. | Não para o primeiro fluxo |
 | Q-12 | Há necessidade de exportar relatórios? | Pode acrescentar geração assíncrona e armazenamento de arquivos. | Não |
+| Q-13 | O backend será Node.js com TypeScript ou Python? | Define runtime da Lambda, toolchain, bibliotecas e pipeline; não altera os contratos. | Sim |
+| Q-14 | Quais são os tempos absoluto e ocioso da sessão e como funciona a revogação? | Define segurança, experiência de uso e TTL do store de sessões. | Sim |
+| Q-15 | Qual é a política de rotação do `client_secret` e quem administra a chave KMS? | Define operação segura do Secrets Manager e recuperação de falhas. | Sim |
+| Q-16 | Com que frequência papéis alterados no Cognito devem refletir em sessões ativas? | Define renovação dos tokens e janela de autorização desatualizada. | Sim |
 
 Nenhum agente deve resolver essas lacunas silenciosamente. Caso uma escolha seja necessária, deve propor um ADR ou solicitar decisão humana.
-

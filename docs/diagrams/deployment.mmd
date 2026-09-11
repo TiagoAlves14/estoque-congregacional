@@ -3,23 +3,27 @@ flowchart TB
     navegador["Navegador — executa a React SPA"]
 
     subgraph aws["Serviços AWS — região da aplicação a definir"]
-        cloudfront["Amazon CloudFront"]
+        cloudfront["Amazon CloudFront — domínio único"]
         s3["Amazon S3 — arquivos estáticos"]
-        cognito["Amazon Cognito — Managed Login e emissão de tokens"]
-        gateway["Amazon API Gateway — HTTP API e autorizador JWT"]
-        lambda["AWS Lambda — aplicação de estoque"]
-        dynamodb[("Amazon DynamoDB — dados de estoque")]
+        gateway["Amazon API Gateway — roteamento HTTP"]
+        lambda["AWS Lambda — BFF e aplicação de estoque; runtime a definir"]
+        cognito["Amazon Cognito — Managed Login"]
+        secrets["AWS Secrets Manager — client_secret"]
+        sessions[("Amazon DynamoDB — sessões com TTL")]
+        stock[("Amazon DynamoDB — dados de estoque")]
         cloudwatch["Amazon CloudWatch — logs e métricas"]
     end
 
     usuario -->|Opera| navegador
-    navegador -->|Carrega a aplicação via HTTPS| cloudfront
+    navegador -->|HTTPS; cookie Secure e HttpOnly| cloudfront
     cloudfront -->|Busca arquivos estáticos| s3
-    navegador -->|Authorization Code com PKCE| cognito
-    navegador -->|HTTPS e JSON com access token| gateway
-    gateway -.->|Obtém e mantém em cache as chaves públicas do emissor| cognito
+    cloudfront -->|Encaminha /api e /auth sem cache| gateway
+    navegador -->|Redirecionado ao Managed Login| cognito
+    cognito -.->|Redireciona o navegador com código| navegador
     gateway -->|Invoca| lambda
-    lambda -->|Lê e grava| dynamodb
+    lambda -->|Troca código e renova tokens| cognito
+    lambda -->|Obtém e mantém segredo em cache controlado| secrets
+    lambda -->|Cria, valida e revoga sessões| sessions
+    lambda -->|Lê e grava estoque| stock
     gateway -->|Publica logs e métricas| cloudwatch
     lambda -->|Publica logs e métricas| cloudwatch
-

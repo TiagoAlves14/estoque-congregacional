@@ -1,22 +1,113 @@
 openapi: 3.1.0
 info:
   title: API do Estoque Congregacional
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    Contrato proposto para produtos e movimentações de estoque.
+    Contrato proposto para a sessão BFF, produtos e movimentações de estoque.
+    O navegador autentica-se com cookie opaco; JWTs permanecem no servidor.
     A URL de servidor é ilustrativa e será definida na implementação.
 servers:
-  - url: https://api.example.com
+  - url: https://app.example.com
     description: Placeholder; não representa um ambiente existente
 security:
-  - bearerAuth: []
+  - cookieAuth: []
 tags:
+  - name: Session
+    description: Login, consulta e encerramento da sessão BFF
   - name: Products
     description: Cadastro e consulta de produtos
   - name: Movements
     description: Entradas, saídas e histórico
 paths:
-  /products:
+  /auth/login:
+    get:
+      tags: [Session]
+      operationId: beginLogin
+      summary: Inicia Authorization Code com PKCE no BFF
+      security: []
+      responses:
+        '302':
+          description: Redirecionamento ao Managed Login do Cognito
+          headers:
+            Location:
+              description: URL de autorização com state e code_challenge
+              schema:
+                type: string
+                format: uri
+  /auth/callback:
+    get:
+      tags: [Session]
+      operationId: completeLogin
+      summary: Valida o callback OAuth e cria a sessão no servidor
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '302':
+          description: Sessão criada e redirecionamento de volta à SPA
+          headers:
+            Location:
+              description: URL da SPA, sem tokens na query ou fragmento
+              schema:
+                type: string
+                format: uri-reference
+            Set-Cookie:
+              description: Cookie __Host-ec_session com Secure, HttpOnly, SameSite=Strict e Path=/
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /auth/session:
+    get:
+      tags: [Session]
+      operationId: getSession
+      summary: Retorna identidade mínima e token CSRF, nunca tokens OAuth
+      responses:
+        '200':
+          description: Sessão válida
+          headers:
+            X-CSRF-Token:
+              $ref: '#/components/headers/CsrfToken'
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      tags: [Session]
+      operationId: endSession
+      summary: Revoga a sessão no servidor e expira o cookie
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
+      responses:
+        '204':
+          description: Sessão encerrada
+          headers:
+            Set-Cookie:
+              description: Cookie de sessão expirado
+              schema:
+                type: string
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /api/products:
     get:
       tags: [Products]
       operationId: listProducts
@@ -51,6 +142,8 @@ paths:
       summary: Cadastra produto com saldo inicial zero
       description: Operação permitida apenas ao papel ADMIN.
       x-required-roles: [ADMIN]
+      parameters:
+        - $ref: '#/components/parameters/CsrfToken'
       requestBody:
         required: true
         content:
@@ -77,7 +170,7 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /products/{productId}:
+  /api/products/{productId}:
     parameters:
       - $ref: '#/components/parameters/ProductId'
     get:
@@ -109,6 +202,7 @@ paths:
       description: Operação permitida apenas ao papel ADMIN. O saldo não pode ser alterado por este recurso.
       x-required-roles: [ADMIN]
       parameters:
+        - $ref: '#/components/parameters/CsrfToken'
         - name: If-Match
           in: header
           required: true
@@ -146,7 +240,7 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
-  /products/{productId}/movements:
+  /api/products/{productId}/movements:
     parameters:
       - $ref: '#/components/parameters/ProductId'
     get:
@@ -176,6 +270,7 @@ paths:
       summary: Registra entrada ou saída de estoque
       x-required-roles: [ADMIN, OPERATOR]
       parameters:
+        - $ref: '#/components/parameters/CsrfToken'
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
@@ -216,11 +311,11 @@ paths:
                 $ref: '#/components/schemas/Problem'
 components:
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: Token de acesso emitido pelo provedor OpenID Connect proposto no ADR-003
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-ec_session
+      description: Identificador opaco de sessão; JWTs permanecem no BFF conforme o ADR-003
   parameters:
     ProductId:
       name: productId
@@ -255,6 +350,15 @@ components:
         type: string
         minLength: 8
         maxLength: 128
+    CsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Token anti-CSRF vinculado à sessão e exigido em operações que alteram estado
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
   headers:
     CorrelationId:
       description: Identificador de correlação da requisição
@@ -262,7 +366,28 @@ components:
         type: string
         minLength: 1
         maxLength: 128
+    CsrfToken:
+      description: Token anti-CSRF vinculado à sessão; a SPA deve mantê-lo somente em memória
+      schema:
+        type: string
+        minLength: 32
+        maxLength: 256
   schemas:
+    SessionView:
+      type: object
+      additionalProperties: false
+      required: [actorId, roles]
+      properties:
+        actorId:
+          type: string
+          minLength: 1
+        roles:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [ADMIN, OPERATOR]
     CreateProductRequest:
       type: object
       additionalProperties: false
@@ -373,7 +498,7 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Unauthorized:
-      description: Token ausente ou inválido
+      description: Sessão ausente, inválida, expirada ou revogada
       headers:
         X-Correlation-Id:
           $ref: '#/components/headers/CorrelationId'
@@ -382,7 +507,7 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Forbidden:
-      description: Usuário autenticado sem permissão para a operação
+      description: Usuário sem permissão, origem não permitida ou proteção CSRF inválida
       headers:
         X-Correlation-Id:
           $ref: '#/components/headers/CorrelationId'
@@ -408,4 +533,3 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
-

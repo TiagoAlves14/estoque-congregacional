@@ -18,7 +18,7 @@ Campos de transporte, timestamps do servidor e identificadores de correlação n
 
 ## Algoritmo proposto
 
-1. Validar JWT, papel, corpo e `Idempotency-Key`.
+1. Validar sessão no BFF, proteção CSRF, papel, corpo e `Idempotency-Key`.
 2. Fazer leitura forte do registro de idempotência.
 3. Se existir com o mesmo `requestHash`, devolver `responseStatus` e `responseBody` armazenados.
 4. Se existir com hash diferente, devolver `409 IDEMPOTENCY_KEY_REUSED`.
@@ -60,4 +60,3 @@ Para entrada, a condição de saldo é omitida e a operação soma a quantidade.
 ## Retenção
 
 O atributo `expiresAt` permite Time to Live (TTL), mas a duração da janela de idempotência permanece em aberto. Nenhum agente deve escolher esse valor sem decisão humana.
-

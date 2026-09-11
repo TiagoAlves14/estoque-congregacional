@@ -1,36 +1,44 @@
 sequenceDiagram
     autonumber
     actor Usuario as Responsável pelo estoque
-    participant Web as Aplicação Web
-    participant API as API Gateway
-    participant App as Aplicação de Estoque
-    participant DB as DynamoDB
+    participant Web as Navegador e SPA
+    participant BFF as BFF e API de Estoque
+    participant Sessao as Store de Sessões
+    participant Estoque as Banco de Estoque
 
     Usuario->>Web: Informa produto, quantidade e motivo
-    Web->>API: POST movimentação com JWT e Idempotency-Key
-    API->>API: Valida JWT e autorização
-    API->>App: Encaminha requisição autorizada
-    App->>DB: Consulta chave de idempotência
+    Web->>BFF: POST /api/.../movements via HTTPS<br/>cookie opaco + X-CSRF-Token + Idempotency-Key
+    BFF->>BFF: Valida origem e proteção CSRF
+    BFF->>Sessao: Busca hash do identificador da sessão
 
-    alt Requisição já processada com o mesmo conteúdo
-        DB-->>App: Retorna resultado armazenado
-        App-->>Web: Repete a resposta sem nova baixa
-    else Nova requisição
-        App->>DB: Lê produto com consistência forte
-        DB-->>App: Retorna saldo e versão
-        App->>DB: Transação: atualiza saldo, cria movimento e idempotência
-        alt Saldo suficiente e versão atual
-            DB-->>App: Confirma transação
-            App-->>Web: 201 — saída registrada
-            Web-->>Usuario: Exibe novo saldo
-        else Saldo insuficiente
-            DB-->>App: Cancela transação
-            App-->>Web: 409 — saldo insuficiente
-            Web-->>Usuario: Exibe erro sem alterar o estoque
-        else Versão alterada por operação concorrente
-            DB-->>App: Cancela transação
-            App-->>Web: 409 — conflito de concorrência
-            Web-->>Usuario: Solicita nova tentativa
+    alt Sessão ausente, expirada ou revogada
+        Sessao-->>BFF: Sessão inválida
+        BFF-->>Web: 401 — autenticação necessária
+        Web-->>Usuario: Solicita novo login
+    else Sessão válida
+        Sessao-->>BFF: Retorna actorId, papéis e expiração
+        BFF->>BFF: Autoriza ADMIN ou OPERATOR
+        BFF->>Estoque: Consulta chave de idempotência
+
+        alt Requisição já processada com o mesmo conteúdo
+            Estoque-->>BFF: Retorna resultado armazenado
+            BFF-->>Web: Repete a resposta sem nova baixa
+        else Nova requisição
+            BFF->>Estoque: Lê produto com consistência forte
+            Estoque-->>BFF: Retorna saldo e versão
+            BFF->>Estoque: Transação: atualiza saldo, cria movimento e idempotência
+            alt Saldo suficiente e versão atual
+                Estoque-->>BFF: Confirma transação
+                BFF-->>Web: 201 — saída registrada
+                Web-->>Usuario: Exibe novo saldo
+            else Saldo insuficiente
+                Estoque-->>BFF: Cancela transação
+                BFF-->>Web: 409 — saldo insuficiente
+                Web-->>Usuario: Exibe erro sem alterar o estoque
+            else Versão alterada por operação concorrente
+                Estoque-->>BFF: Cancela transação
+                BFF-->>Web: 409 — conflito de concorrência
+                Web-->>Usuario: Solicita nova tentativa
+            end
         end
     end
-

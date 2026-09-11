@@ -92,7 +92,7 @@ E deve existir somente uma nova movimentação
 ## CA-10 — Usuário não autenticado
 
 ```gherkin
-Dado que a requisição não possui JWT válido
+Dado que a requisição não possui uma sessão válida no BFF
 Quando qualquer rota protegida for chamada
 Então a API deve responder 401
 E a aplicação de estoque não deve executar o caso de uso
@@ -115,3 +115,50 @@ Então a movimentação original não deve ser alterada ou apagada
 E a correção deve aguardar uma regra explícita para nova movimentação compensatória
 ```
 
+## CA-13 — Tokens e segredo não chegam ao frontend
+
+```gherkin
+Dado que o usuário concluiu o login no Cognito
+Quando o BFF processar o callback de autenticação
+Então access, ID e refresh tokens devem permanecer somente no servidor
+E o client_secret não deve aparecer no bundle, respostas HTTP, armazenamento ou logs do navegador
+E o navegador deve receber apenas o identificador opaco da sessão em cookie HttpOnly
+```
+
+## CA-14 — Cookie de sessão protegido
+
+```gherkin
+Dado que o callback OAuth foi validado
+Quando o BFF criar uma sessão
+Então deve enviar o cookie __Host-ec_session com Secure, HttpOnly, SameSite=Strict e Path=/
+E o cookie não deve possuir o atributo Domain
+E uma nova autenticação deve substituir o identificador de sessão anterior
+```
+
+## CA-15 — Proteção contra CSRF
+
+```gherkin
+Dado que existe uma sessão válida no cookie
+Quando uma operação que altera estado não possuir um X-CSRF-Token válido e origem permitida
+Então a API deve responder 403
+E nenhuma regra de negócio ou gravação deve ser executada
+```
+
+## CA-16 — Sessão expirada ou revogada
+
+```gherkin
+Dado que o item da sessão está expirado ou revogado
+Quando o cookie correspondente for apresentado
+Então o BFF deve responder 401 mesmo que o item ainda aguarde remoção pelo TTL
+E não deve renovar tokens nem executar o caso de uso
+```
+
+## CA-17 — Segredo inacessível ao frontend
+
+```gherkin
+Dado que o BFF precisa autenticar o app client confidencial
+Quando recuperar o client_secret
+Então apenas o papel IAM do BFF pode ler o ARN configurado no Secrets Manager
+E o valor não deve ser incluído em logs ou mensagens de erro
+E uma falha de recuperação deve interromper o login de forma fechada
+```

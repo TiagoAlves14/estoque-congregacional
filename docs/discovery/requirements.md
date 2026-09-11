@@ -46,12 +46,15 @@ Estes itens orientam a arquitetura, mas seus valores precisam de validação:
 
 | ID | Categoria | Proposta |
 | --- | --- | --- |
-| RNF-01 | Segurança | Todo tráfego externo deve usar HTTPS e toda rota, exceto verificação técnica de saúde, deve exigir JWT válido. |
+| RNF-01 | Segurança | Todo tráfego externo deve usar HTTPS e toda rota protegida deve exigir sessão válida no BFF. |
 | RNF-02 | Auditoria | Logs técnicos não substituem o histórico funcional das movimentações. |
-| RNF-03 | Privacidade | Não registrar JWT, senha, e-mail ou dados pessoais desnecessários em logs. |
+| RNF-03 | Privacidade | Não registrar JWT, senha, segredo, cookie, token CSRF, e-mail ou dados pessoais desnecessários em logs. |
 | RNF-04 | Consistência | Uma saída concorrente não pode violar a regra de saldo não negativo. |
 | RNF-05 | Portabilidade | Contratos HTTP e schemas devem permanecer independentes da implementação interna da Lambda. |
 | RNF-06 | Operabilidade | Cada chamada deve possuir identificador de correlação e métricas de sucesso, erro e duração. |
+| RNF-07 | Fronteira do frontend | A SPA não deve receber nem armazenar JWT, `client_secret` ou credenciais AWS. |
+| RNF-08 | Sessão web | A autenticação usa cookie opaco `Secure` e `HttpOnly`; operações mutáveis também exigem controle CSRF. |
+| RNF-09 | Gestão de segredos | O `client_secret` deve permanecer no Secrets Manager e ser lido somente pelo BFF com menor privilégio. |
 
 Disponibilidade, latência, throughput, retenção e objetivos de recuperação não possuem valores definidos. Consulte [perguntas em aberto](open-questions.md).
 
@@ -61,6 +64,7 @@ Disponibilidade, latência, throughput, retenção e objetivos de recuperação 
 - Papéis e permissões confirmados.
 - Campos de produto e movimentação confirmados.
 - Política de retenção e backup definida.
+- Política de duração, renovação e revogação de sessão definida.
+- Runtime do backend escolhido no ADR-005.
 - Volume esperado e orçamento aproximado informados.
 - Contrato OpenAPI revisado pelo responsável funcional.
-
