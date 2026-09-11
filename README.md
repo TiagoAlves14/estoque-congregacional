@@ -58,27 +58,26 @@ O desenho mantém o nível de containers inspirado no C4. Serviços gerenciados 
 ```mermaid
 flowchart TB
     usuario["Responsável pelo estoque"]
-    cognito["Amazon Cognito — externo"]
+    cognito["Provedor de Identidade — Amazon Cognito — externo"]
+    observabilidade["Plataforma de Observabilidade — Amazon CloudWatch — externo"]
 
     subgraph sistema["Estoque Congregacional"]
-        web["Aplicação Web — React SPA"]
-        gateway["API HTTP — API Gateway"]
-        backend["Aplicação de Estoque — AWS Lambda"]
-        banco[("Tabela de Estoque — DynamoDB")]
-        observabilidade["Observabilidade — CloudWatch"]
+        web["Aplicação Web — React SPA executada no navegador"]
+        api["API de Estoque — aplicação TypeScript"]
+        banco[("Banco de Dados de Estoque — DynamoDB")]
     end
 
-    usuario -->|Usa via HTTPS| web
-    web -->|Autentica com PKCE| cognito
-    web -->|Envia JWT e JSON via HTTPS| gateway
-    gateway -.->|Valida JWT| cognito
-    gateway -->|Encaminha requisição autorizada| backend
-    backend -->|Lê e grava dados| banco
-    gateway -->|Publica métricas e logs| observabilidade
-    backend -->|Publica métricas e logs| observabilidade
+    usuario -->|Usa pelo navegador| web
+    web -->|Inicia autenticação OIDC com PKCE| cognito
+    web -->|Consome via HTTPS e JSON com access token| api
+    api -.->|Confia em tokens emitidos por| cognito
+    api -->|Lê e grava dados| banco
+    api -->|Publica métricas e logs| observabilidade
 ```
 
 Fonte versionada: [`docs/diagrams/containers.mmd`](docs/diagrams/containers.mmd).
+
+> **Erro identificado na revisão:** a primeira versão dizia que o usuário “usa via HTTPS”. Isso misturava a interação humana com um protocolo entre componentes. O correto é o usuário usar a aplicação pelo navegador; a SPA executada no navegador é que consome a API via HTTPS. A infraestrutura física foi separada no [diagrama de implantação](docs/diagrams/deployment.mmd).
 
 ## Diagrama comportamental — registro de saída
 
@@ -131,6 +130,7 @@ A distinção entre fatos, inferências, decisões propostas, ajustes e lacunas 
 Em resumo:
 
 - O modelo inferiu corretamente a separação entre interface, regras e persistência, a necessidade de autenticação e o risco de saldo insuficiente.
+- O modelo errou ao associar `HTTPS` diretamente à ação do usuário e deixou ambíguo quem emitia o JWT; ambos os pontos foram corrigidos e registrados.
 - A revisão limitou a solução a uma única API modular, retirou notificações externas e tornou explícita a atomicidade da movimentação.
 - AWS, React, Cognito, Lambda, DynamoDB e idempotência foram convertidos em decisões propostas e documentados em ADRs, em vez de serem tratados como fatos.
 - Ainda faltam validação de volume, objetivos de disponibilidade, orçamento, retenção e aceite formal dos ADRs.
@@ -164,6 +164,7 @@ Em resumo:
 - [Registro dos prompts](docs/discovery/prompt-log.md)
 - [Lacunas e perguntas em aberto](docs/discovery/open-questions.md)
 - [Contexto para agentes](docs/agent-context.md)
+- [Diagrama de implantação AWS](docs/diagrams/deployment.mmd)
 - [Contrato OpenAPI](docs/openapi.yaml)
 - [Modelo DynamoDB](docs/dynamodb/data-model.md)
 - [Padrões de acesso](docs/dynamodb/access-patterns.md)

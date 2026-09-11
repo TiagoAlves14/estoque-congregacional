@@ -1,0 +1,25 @@
+flowchart TB
+    usuario["Responsável pelo estoque"]
+    navegador["Navegador — executa a React SPA"]
+
+    subgraph aws["Serviços AWS — região da aplicação a definir"]
+        cloudfront["Amazon CloudFront"]
+        s3["Amazon S3 — arquivos estáticos"]
+        cognito["Amazon Cognito — Managed Login e emissão de tokens"]
+        gateway["Amazon API Gateway — HTTP API e autorizador JWT"]
+        lambda["AWS Lambda — aplicação de estoque"]
+        dynamodb[("Amazon DynamoDB — dados de estoque")]
+        cloudwatch["Amazon CloudWatch — logs e métricas"]
+    end
+
+    usuario -->|Opera| navegador
+    navegador -->|Carrega a aplicação via HTTPS| cloudfront
+    cloudfront -->|Busca arquivos estáticos| s3
+    navegador -->|Authorization Code com PKCE| cognito
+    navegador -->|HTTPS e JSON com access token| gateway
+    gateway -.->|Obtém e mantém em cache as chaves públicas do emissor| cognito
+    gateway -->|Invoca| lambda
+    lambda -->|Lê e grava| dynamodb
+    gateway -->|Publica logs e métricas| cloudwatch
+    lambda -->|Publica logs e métricas| cloudwatch
+

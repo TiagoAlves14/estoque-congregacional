@@ -11,9 +11,9 @@
 
 | Risco | Controle arquitetural |
 | --- | --- |
-| Roubo de credenciais | Senhas não são tratadas pela aplicação; autenticação fica no provedor de identidade. |
+| Roubo de credenciais | Senhas são coletadas pelo Managed Login do Cognito, não pela SPA; o app client público não possui segredo. |
 | Interceptação | HTTPS obrigatório em todos os acessos externos. |
-| Roubo de token por script | Authorization Code com PKCE e proibição de persistir token em `localStorage`; política final de sessão ainda deve ser validada. |
+| Roubo de token por script | Authorization Code com PKCE, token apenas em memória, Content Security Policy e proibição de persistência em `localStorage`; política final de sessão ainda deve ser validada. |
 | Acesso indevido | JWT validado no gateway e autorização por papel repetida no caso de uso. |
 | Reenvio de movimentação | `Idempotency-Key`, hash do conteúdo e resposta armazenada. |
 | Saída concorrente | Versão do produto, condição de saldo e transação DynamoDB. |
@@ -31,6 +31,25 @@
 - grupo ou papel validado para `ADMIN` e `OPERATOR`.
 
 A aplicação não deve usar e-mail como identificador de autorização.
+
+## O que pode e o que não pode existir no frontend
+
+Pode ser público:
+
+- `client_id` do app client sem segredo;
+- domínio e identificador do User Pool;
+- URLs de callback e logout;
+- escopos OAuth solicitados.
+
+Não pode existir no bundle da SPA:
+
+- `client_secret`;
+- chave de acesso ou chave secreta AWS;
+- senha de usuário;
+- chave privada de assinatura de JWT;
+- credencial de banco de dados.
+
+O Cognito gera e assina os JWTs. O API Gateway valida assinatura e claims com a chave pública obtida do `jwks_uri` do emissor; essa chave pode ser mantida em cache e não representa uma chamada ao Cognito a cada requisição.
 
 ## Logs estruturados
 
@@ -64,4 +83,3 @@ Os limiares dos alarmes não foram definidos e não devem ser inventados.
 ## Dados e retenção
 
 O sistema armazena identificador técnico do usuário para auditoria. A necessidade de nome, e-mail ou outros dados pessoais não foi demonstrada. Retenção de movimentos, logs, backups e idempotência permanece em aberto.
-

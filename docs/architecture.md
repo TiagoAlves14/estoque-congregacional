@@ -34,12 +34,13 @@ O frontend será uma Single-Page Application (SPA). O acesso à API ocorrerá so
 ## Fluxo de dados
 
 1. O usuário acessa a SPA distribuída pelo CloudFront.
-2. A SPA autentica o usuário no Cognito usando Authorization Code com Proof Key for Code Exchange (PKCE).
-3. A SPA chama a HTTP API com JWT e identificador de correlação.
-4. O API Gateway valida o token e encaminha a chamada à aplicação Lambda.
-5. A aplicação valida o papel e executa o caso de uso.
-6. Movimentações alteram saldo, criam histórico e registram idempotência em uma transação DynamoDB.
-7. Logs e métricas técnicas são enviados ao CloudWatch sem tokens ou dados desnecessários do usuário.
+2. O navegador executa a SPA, que inicia o Authorization Code com Proof Key for Code Exchange (PKCE) no Managed Login do Cognito.
+3. O Cognito autentica o usuário, emite e assina os tokens; a SPA não gera JWT e não possui `client_secret` nem credenciais AWS.
+4. A SPA chama a HTTP API com o access token e o identificador de correlação.
+5. O API Gateway valida assinatura e claims usando as chaves públicas do emissor, que podem ser mantidas em cache, e encaminha a chamada à aplicação Lambda.
+6. A aplicação valida o papel e executa o caso de uso.
+7. Movimentações alteram saldo, criam histórico e registram idempotência em uma transação DynamoDB.
+8. Logs e métricas técnicas são enviados ao CloudWatch sem tokens ou dados desnecessários do usuário.
 
 ## Autorização proposta
 
@@ -69,8 +70,8 @@ A arquitetura utiliza serviços gerenciados e sem estado, mas objetivos numéric
 
 - [Contexto](diagrams/context.mmd)
 - [Containers](diagrams/containers.mmd)
+- [Implantação AWS](diagrams/deployment.mmd)
 - [Sequência de saída](diagrams/stock-exit-sequence.mmd)
 - [Modelo DynamoDB](dynamodb/data-model.md)
 - [Contrato OpenAPI](openapi.yaml)
 - [Segurança e observabilidade](security/security-and-observability.md)
-

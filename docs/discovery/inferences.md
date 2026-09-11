@@ -43,6 +43,16 @@ Este registro distingue o que foi informado no discovery do que foi sugerido pel
 | Detalhar funções e classes no desenho estrutural. | Manter somente containers. | Não misturar níveis do modelo C4. |
 | Considerar múltiplas igrejas como evolução automática. | Manter single-tenant nesta fase. | Multi-tenancy foi declarado fora do escopo. |
 
+## Erros identificados na primeira geração
+
+| ID | Erro | Por que estava incorreto | Correção aplicada |
+| --- | --- | --- | --- |
+| E-01 | A relação entre o responsável e a aplicação foi descrita como `Usa via HTTPS`. | Uma pessoa não interage com o protocolo diretamente. Ela usa a interface; a SPA executada no navegador realiza a comunicação HTTP. | A relação passou a ser `Usa pelo navegador`, e o HTTPS ficou na relação entre a SPA e a API. |
+| E-02 | O diagrama deixou ambíguo se a SPA gerava o JWT e mantinha credenciais para isso. | O JWT é emitido e assinado pelo Cognito. Uma SPA é um cliente OAuth público e não consegue proteger um `client_secret`. | O fluxo agora declara Cognito como emissor, app client público sem segredo, Managed Login e Authorization Code com PKCE. |
+| E-03 | A visão de containers misturava containers lógicos com API Gateway, Lambda e CloudWatch como detalhes de implantação. | Isso misturava níveis e reduzia a clareza do C4. | A visão de containers foi simplificada, e os serviços físicos passaram para um diagrama de implantação separado. |
+
+Esses erros permanecem observáveis no histórico Git: a primeira versão foi preservada no commit anterior e a correção foi feita em mudança posterior.
+
 ## O que um agente ainda não pode decidir sozinho
 
 - Mudar um ADR de `Proposto` para `Aceito`.
@@ -53,4 +63,3 @@ Este registro distingue o que foi informado no discovery do que foi sugerido pel
 - Escolher limites numéricos de paginação, timeout, retentativa e alarme além dos máximos documentados no contrato.
 
 Esses pontos devem ser tratados como perguntas ao responsável, e não completados por inferência.
-
