@@ -1,0 +1,411 @@
+openapi: 3.1.0
+info:
+  title: API do Estoque Congregacional
+  version: 0.1.0
+  description: |
+    Contrato proposto para produtos e movimentações de estoque.
+    A URL de servidor é ilustrativa e será definida na implementação.
+servers:
+  - url: https://api.example.com
+    description: Placeholder; não representa um ambiente existente
+security:
+  - bearerAuth: []
+tags:
+  - name: Products
+    description: Cadastro e consulta de produtos
+  - name: Movements
+    description: Entradas, saídas e histórico
+paths:
+  /products:
+    get:
+      tags: [Products]
+      operationId: listProducts
+      summary: Lista produtos por nome
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: namePrefix
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+      responses:
+        '200':
+          description: Página de produtos
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Products]
+      operationId: createProduct
+      summary: Cadastra produto com saldo inicial zero
+      description: Operação permitida apenas ao papel ADMIN.
+      x-required-roles: [ADMIN]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Produto criado
+          headers:
+            Location:
+              description: URI do produto criado
+              schema:
+                type: string
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/product.schema.json'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /products/{productId}:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Products]
+      operationId: getProduct
+      summary: Consulta produto e saldo atual
+      responses:
+        '200':
+          description: Produto encontrado
+          headers:
+            ETag:
+              description: Versão usada para controle de concorrência
+              schema:
+                type: string
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/product.schema.json'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [Products]
+      operationId: updateProduct
+      summary: Altera dados ou estado do produto
+      description: Operação permitida apenas ao papel ADMIN. O saldo não pode ser alterado por este recurso.
+      x-required-roles: [ADMIN]
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Versão retornada no ETag da consulta anterior
+          schema:
+            type: string
+            minLength: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Produto atualizado
+          headers:
+            ETag:
+              description: Nova versão do produto
+              schema:
+                type: string
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/product.schema.json'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /products/{productId}/movements:
+    parameters:
+      - $ref: '#/components/parameters/ProductId'
+    get:
+      tags: [Movements]
+      operationId: listProductMovements
+      summary: Lista o histórico imutável do produto
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página de movimentações
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovementPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags: [Movements]
+      operationId: createStockMovement
+      summary: Registra entrada ou saída de estoque
+      x-required-roles: [ADMIN, OPERATOR]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovementRequest'
+      responses:
+        '201':
+          description: Movimentação criada
+          headers:
+            Location:
+              description: URI lógica da movimentação criada
+              schema:
+                type: string
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/json:
+              schema:
+                $ref: './schemas/stock-movement.schema.json'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Saldo insuficiente, produto inativo, concorrência ou reutilização inválida da chave
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de acesso emitido pelo provedor OpenID Connect proposto no ADR-003
+  parameters:
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor opaco retornado pela página anterior
+      schema:
+        type: string
+        minLength: 1
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Chave única por usuário e intenção de movimentação
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  headers:
+    CorrelationId:
+      description: Identificador de correlação da requisição
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+  schemas:
+    CreateProductRequest:
+      type: object
+      additionalProperties: false
+      required: [name, category, unit, minimumStock]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        category:
+          type: string
+          minLength: 1
+          maxLength: 60
+        unit:
+          type: string
+          enum: [UNIT, PACKAGE, LITER, KILOGRAM]
+        minimumStock:
+          type: integer
+          minimum: 0
+    UpdateProductRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        category:
+          type: string
+          minLength: 1
+          maxLength: 60
+        unit:
+          type: string
+          enum: [UNIT, PACKAGE, LITER, KILOGRAM]
+        minimumStock:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum: [ACTIVE, INACTIVE]
+    CreateMovementRequest:
+      type: object
+      additionalProperties: false
+      required: [type, quantity, reason]
+      properties:
+        type:
+          type: string
+          enum: [ENTRY, EXIT]
+        quantity:
+          type: integer
+          minimum: 1
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 200
+    ProductPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: './schemas/product.schema.json'
+        nextCursor:
+          type: [string, 'null']
+    MovementPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: './schemas/stock-movement.schema.json'
+        nextCursor:
+          type: [string, 'null']
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, correlationId]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        code:
+          type: string
+          examples: [INSUFFICIENT_STOCK]
+        detail:
+          type: string
+        correlationId:
+          type: string
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Token ausente ou inválido
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: Usuário autenticado sem permissão para a operação
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: Recurso não encontrado
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: Estado ou versão incompatível com a operação
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+

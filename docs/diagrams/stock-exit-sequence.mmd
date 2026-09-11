@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor Usuario as Responsável pelo estoque
+    participant Web as Aplicação Web
+    participant API as API Gateway
+    participant App as Aplicação de Estoque
+    participant DB as DynamoDB
+
+    Usuario->>Web: Informa produto, quantidade e motivo
+    Web->>API: POST movimentação com JWT e Idempotency-Key
+    API->>API: Valida JWT e autorização
+    API->>App: Encaminha requisição autorizada
+    App->>DB: Consulta chave de idempotência
+
+    alt Requisição já processada com o mesmo conteúdo
+        DB-->>App: Retorna resultado armazenado
+        App-->>Web: Repete a resposta sem nova baixa
+    else Nova requisição
+        App->>DB: Lê produto com consistência forte
+        DB-->>App: Retorna saldo e versão
+        App->>DB: Transação: atualiza saldo, cria movimento e idempotência
+        alt Saldo suficiente e versão atual
+            DB-->>App: Confirma transação
+            App-->>Web: 201 — saída registrada
+            Web-->>Usuario: Exibe novo saldo
+        else Saldo insuficiente
+            DB-->>App: Cancela transação
+            App-->>Web: 409 — saldo insuficiente
+            Web-->>Usuario: Exibe erro sem alterar o estoque
+        else Versão alterada por operação concorrente
+            DB-->>App: Cancela transação
+            App-->>Web: 409 — conflito de concorrência
+            Web-->>Usuario: Solicita nova tentativa
+        end
+    end
+

@@ -1,168 +1,189 @@
 # Estoque Congregacional
 
-> Documentação arquitetural de um sistema web para controle de estoque de uma igreja, com diagramas C4 e de sequência em Mermaid.
+> Base de documentação arquitetural de um sistema web para controle de estoque de uma igreja, produzida com a abordagem *diagrams as code*.
 
-## Objetivo do repositório
+## Objetivo
 
-Este repositório concentra a fase inicial de discovery do **Estoque Congregacional**. A documentação foi escrita em linguagem natural e os diagramas foram mantidos como código para que possam ser versionados, revisados e reproduzidos.
+Este repositório concentra o discovery e a especificação arquitetural do **Estoque Congregacional**. Os artefatos foram organizados para serem versionáveis, revisáveis e utilizáveis como contexto por futuros agentes de desenvolvimento.
 
-O conteúdo também poderá servir futuramente como contexto para agentes de desenvolvimento, desde que as lacunas registradas neste documento sejam resolvidas antes da implementação.
+O repositório documenta a arquitetura; ele **não contém uma aplicação implementada**. As tecnologias da baseline são propostas registradas em ADRs e precisam de aceite humano antes do início do desenvolvimento.
 
-## Descrição do sistema
+## Visão do sistema
 
-O Estoque Congregacional será uma aplicação web para apoiar o controle de materiais utilizados por uma única igreja, como produtos de limpeza, materiais de escritório, itens descartáveis e materiais empregados em eventos.
-
-Usuários autorizados poderão cadastrar produtos, registrar entradas e saídas, consultar o saldo atual, visualizar o histórico de movimentações e identificar itens que atingiram o estoque mínimo. O sistema deverá impedir que uma saída deixe o saldo negativo e deverá manter o registro de todas as movimentações realizadas.
+O Estoque Congregacional apoiará uma única igreja no controle de produtos de limpeza, materiais de escritório, itens descartáveis e materiais usados em eventos. Usuários autorizados poderão cadastrar produtos, registrar entradas e saídas, consultar saldos, visualizar o histórico e identificar itens abaixo do estoque mínimo.
 
 ### Escopo
 
-Estão incluídos nesta fase:
+- Cadastro e consulta de produtos.
+- Registro de entradas e saídas.
+- Consulta do saldo atual.
+- Histórico de movimentações por produto.
+- Indicação visual de estoque mínimo.
+- Autenticação e autorização de usuários.
+- Auditoria mínima das operações.
 
-- cadastro e consulta de produtos;
-- registro de entradas de materiais;
-- registro de saídas de materiais;
-- consulta do saldo disponível;
-- histórico de movimentações;
-- indicação visual de produtos com estoque mínimo;
-- autenticação de usuários autorizados.
+### Fora do escopo
 
-Estão fora do escopo:
+- Compras, pagamentos e emissão de notas fiscais.
+- Integração com fornecedores ou ERP.
+- Controle de validade, lote ou localização física.
+- Funcionamento offline.
+- Múltiplas igrejas na mesma instalação.
+- Alertas por e-mail, SMS ou aplicativos de mensagens.
 
-- compras e pagamentos;
-- emissão de notas fiscais;
-- integração com fornecedores ou sistemas de planejamento de recursos empresariais (ERP);
-- controle de validade, lote ou localização física;
-- funcionamento offline;
-- suporte a várias igrejas na mesma instalação;
-- envio de alertas por e-mail, SMS ou aplicativos de mensagens.
+### Regras invariantes
 
-### Nível da visão
+1. O saldo de um produto nunca pode ficar negativo.
+2. Toda entrada ou saída deve gerar uma movimentação imutável e rastreável.
+3. Alteração de saldo, criação da movimentação e registro de idempotência devem ser atômicos.
+4. Uma repetição com a mesma chave de idempotência e o mesmo conteúdo não pode duplicar o efeito.
+5. Uma mesma chave de idempotência com conteúdo diferente deve ser rejeitada.
 
-O diagrama estrutural apresenta uma visão de **containers inspirada no modelo C4**. Ele mostra aplicações, armazenamento e integração externa, sem detalhar componentes internos, classes, endpoints ou infraestrutura de nuvem.
+## Baseline arquitetural proposta
 
-### Limites e responsabilidades
+| Responsabilidade | Solução proposta | Situação |
+| --- | --- | --- |
+| Interface web | SPA React em Amazon S3 e CloudFront | Proposta no ADR-001 |
+| Identidade | Amazon Cognito com Authorization Code e PKCE | Proposta no ADR-003 |
+| Entrada HTTP | Amazon API Gateway HTTP API com autorizador JWT | Proposta no ADR-001 |
+| Regras de negócio | Aplicação TypeScript em AWS Lambda, organizada como monólito modular | Proposta no ADR-001 |
+| Persistência | Amazon DynamoDB com single-table design | Proposta no ADR-002 |
+| Consistência de movimentações | Transação, condição de saldo e chave de idempotência | Proposta no ADR-004 |
+| Observabilidade | Logs, métricas e alarmes no Amazon CloudWatch | Proposta no ADR-001 |
 
-| Elemento | Limite e responsabilidade |
-| --- | --- |
-| Responsável pelo estoque | Cadastra produtos, registra movimentações e consulta saldos e histórico. |
-| Aplicação Web | Apresenta a interface, coleta dados e exibe os resultados das operações. |
-| API de Estoque | Aplica regras de negócio, autoriza operações e coordena a persistência. |
-| Banco de Dados | Armazena produtos, saldos e histórico de movimentações. |
-| Serviço de Autenticação | Integração externa responsável por autenticar os usuários; o provedor ainda não foi definido. |
+## Diagrama estrutural — visão de containers
 
-### Integrações
-
-A única integração externa considerada nesta fase é o serviço de autenticação. A Aplicação Web obtém a identidade do usuário e envia suas solicitações à API por HTTPS. Integrações com fornecedores, pagamentos, mensagens ou sistemas administrativos não fazem parte desta visão.
-
-### Restrições e regras
-
-- O sistema atenderá inicialmente apenas uma igreja.
-- Somente usuários autenticados poderão realizar operações.
-- O saldo de um produto nunca poderá ficar negativo.
-- Toda entrada ou saída deverá gerar uma movimentação rastreável.
-- A atualização do saldo e o registro da movimentação deverão ocorrer como uma única operação lógica.
-- Os diagramas não devem misturar o nível de containers com detalhes de componentes ou código.
-- A documentação pública não deverá conter dados reais de usuários, credenciais ou informações sensíveis.
-
-### Lacunas conhecidas
-
-As seguintes decisões ainda precisam ser tomadas antes da implementação:
-
-- tecnologia do frontend, da API e do banco de dados;
-- provedor e fluxo detalhado de autenticação;
-- papéis de acesso, como administrador e operador;
-- campos obrigatórios do cadastro de produtos;
-- regra de definição e alteração do estoque mínimo;
-- estratégia para concorrência em saídas simultâneas;
-- requisitos de disponibilidade, desempenho e volume;
-- política de auditoria, retenção, backup e recuperação;
-- hospedagem, ambientes e processo de implantação;
-- observabilidade, tratamento de erros e critérios de teste.
-
-## Diagrama estrutural
-
-A visão abaixo mantém somente o nível de containers e destaca o serviço de autenticação como integração externa.
+O desenho mantém o nível de containers inspirado no C4. Serviços gerenciados externos ao limite lógico da aplicação são identificados como externos.
 
 ```mermaid
-flowchart LR
+flowchart TB
     usuario["Responsável pelo estoque"]
-    autenticacao["Serviço de Autenticação (externo; provedor a definir)"]
+    cognito["Amazon Cognito — externo"]
 
     subgraph sistema["Estoque Congregacional"]
-        web["Aplicação Web"]
-        api["API de Estoque"]
-        banco[("Banco de Dados")]
+        web["Aplicação Web — React SPA"]
+        gateway["API HTTP — API Gateway"]
+        backend["Aplicação de Estoque — AWS Lambda"]
+        banco[("Tabela de Estoque — DynamoDB")]
+        observabilidade["Observabilidade — CloudWatch"]
     end
 
-    usuario -->|Usa| web
-    web -->|Autentica o usuário| autenticacao
-    web -->|Envia operações via HTTPS e JSON| api
-    api -->|Consulta e persiste dados| banco
+    usuario -->|Usa via HTTPS| web
+    web -->|Autentica com PKCE| cognito
+    web -->|Envia JWT e JSON via HTTPS| gateway
+    gateway -.->|Valida JWT| cognito
+    gateway -->|Encaminha requisição autorizada| backend
+    backend -->|Lê e grava dados| banco
+    gateway -->|Publica métricas e logs| observabilidade
+    backend -->|Publica métricas e logs| observabilidade
 ```
 
-## Diagrama comportamental
+Fonte versionada: [`docs/diagrams/containers.mmd`](docs/diagrams/containers.mmd).
 
-A jornada crítica escolhida foi o registro da saída de um produto. O usuário já deve estar autenticado. O fluxo apresenta o caminho de sucesso e a falha causada por saldo insuficiente.
+## Diagrama comportamental — registro de saída
+
+A jornada crítica considera o usuário autenticado e apresenta repetição idempotente, sucesso, saldo insuficiente e conflito concorrente.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Usuario as Responsável pelo estoque
     participant Web as Aplicação Web
-    participant API as API de Estoque
-    participant DB as Banco de Dados
+    participant API as API Gateway
+    participant App as Aplicação de Estoque
+    participant DB as DynamoDB
 
-    Usuario->>Web: Informa o produto e a quantidade
-    Web->>API: Solicita o registro da saída
-    API->>DB: Solicita baixa condicional e registro da movimentação
+    Usuario->>Web: Informa produto, quantidade e motivo
+    Web->>API: POST movimentação com JWT e Idempotency-Key
+    API->>API: Valida JWT e autorização
+    API->>App: Encaminha requisição autorizada
+    App->>DB: Consulta chave de idempotência
 
-    alt Saldo disponível é suficiente
-        DB-->>API: Confirma a operação e retorna o novo saldo
-        API-->>Web: Confirma a saída
-        Web-->>Usuario: Exibe sucesso e o novo saldo
-    else Saldo disponível é insuficiente
-        DB-->>API: Rejeita a operação sem alterar os dados
-        API-->>Web: Informa saldo insuficiente
-        Web-->>Usuario: Exibe a mensagem de erro
+    alt Requisição já processada com o mesmo conteúdo
+        DB-->>App: Retorna resultado armazenado
+        App-->>Web: Repete a resposta sem nova baixa
+    else Nova requisição
+        App->>DB: Lê produto com consistência forte
+        DB-->>App: Retorna saldo e versão
+        App->>DB: Transação: atualiza saldo, cria movimento e idempotência
+        alt Saldo suficiente e versão atual
+            DB-->>App: Confirma transação
+            App-->>Web: 201 — saída registrada
+            Web-->>Usuario: Exibe novo saldo
+        else Saldo insuficiente
+            DB-->>App: Cancela transação
+            App-->>Web: 409 — saldo insuficiente
+            Web-->>Usuario: Exibe erro sem alterar o estoque
+        else Versão alterada por operação concorrente
+            DB-->>App: Cancela transação
+            App-->>Web: 409 — conflito de concorrência
+            Web-->>Usuario: Solicita nova tentativa
+        end
     end
 ```
 
-## Uso de GenAI e revisão humana
+Fonte versionada: [`docs/diagrams/stock-exit-sequence.mmd`](docs/diagrams/stock-exit-sequence.mmd).
 
-A GenAI foi utilizada para transformar a descrição inicial do sistema em uma proposta de documentação e em diagramas Mermaid. A saída foi revisada antes de ser incorporada ao repositório.
+## Evidência do uso de GenAI
 
-### O que o modelo inferiu corretamente
+A distinção entre fatos, inferências, decisões propostas, ajustes e lacunas está registrada em [`docs/discovery/inferences.md`](docs/discovery/inferences.md). Esse registro evita apresentar escolhas produzidas pelo modelo como se fossem requisitos fornecidos.
 
-- a separação entre interface web, regras de negócio e persistência;
-- a necessidade de autenticação para restringir as operações;
-- o registro de saída como uma jornada crítica;
-- a existência de um caminho alternativo quando não há saldo suficiente;
-- a importância de manter um histórico das movimentações.
+Em resumo:
 
-### O que foi ajustado
+- O modelo inferiu corretamente a separação entre interface, regras e persistência, a necessidade de autenticação e o risco de saldo insuficiente.
+- A revisão limitou a solução a uma única API modular, retirou notificações externas e tornou explícita a atomicidade da movimentação.
+- AWS, React, Cognito, Lambda, DynamoDB e idempotência foram convertidos em decisões propostas e documentados em ADRs, em vez de serem tratados como fatos.
+- Ainda faltam validação de volume, objetivos de disponibilidade, orçamento, retenção e aceite formal dos ADRs.
 
-- A proposta foi mantida com uma única API, evitando criar microsserviços sem necessidade.
-- Alertas externos de estoque mínimo foram retirados do escopo; nesta fase haverá apenas indicação visual na aplicação.
-- Tecnologias, provedor de autenticação e infraestrutura não foram escolhidos automaticamente e permaneceram registrados como lacunas.
-- O fluxo de saída passou a exigir que a baixa do saldo e o registro da movimentação formem uma única operação lógica.
-- A autenticação foi identificada como integração externa, mas sem inventar um fornecedor específico.
-- Detalhes de componentes, endpoints e classes foram removidos do diagrama estrutural para preservar o nível de containers.
+## Organização do repositório
 
-### O que ainda falta para um agente implementar sem inventar decisões
+```text
+.
+├── .github/workflows/              # Validação automatizada dos artefatos
+├── docs/
+│   ├── decisions/                  # Architecture Decision Records (ADRs)
+│   ├── diagrams/                   # Fontes Mermaid
+│   ├── discovery/                  # Requisitos, lacunas e inferências
+│   ├── dynamodb/                   # Modelo, acessos e transações
+│   ├── mapping/                    # Rastreabilidade entre artefatos
+│   ├── schemas/                    # Contratos JSON Schema
+│   ├── security/                   # Segurança e observabilidade
+│   ├── tests/                      # Cenários de aceitação arquitetural
+│   ├── agent-context.md            # Regras para futuros agentes
+│   ├── architecture.md             # Visão arquitetural consolidada
+│   └── openapi.yaml                # Contrato HTTP OpenAPI 3.1
+├── scripts/validate_architecture.py
+└── README.md
+```
 
-Além de resolver as lacunas anteriores, será necessário produzir requisitos funcionais detalhados, modelo de dados, contratos da API, matriz de papéis e permissões, critérios de aceite, regras de concorrência e idempotência, requisitos não funcionais, estratégia de segurança, decisões arquiteturais registradas em ADRs e uma definição objetiva de pronto.
+## Índice dos artefatos
 
-## Critérios de revisão dos diagramas
+- [Descrição e arquitetura consolidada](docs/architecture.md)
+- [Requisitos e regras de negócio](docs/discovery/requirements.md)
+- [Inferências e ajustes da GenAI](docs/discovery/inferences.md)
+- [Registro dos prompts](docs/discovery/prompt-log.md)
+- [Lacunas e perguntas em aberto](docs/discovery/open-questions.md)
+- [Contexto para agentes](docs/agent-context.md)
+- [Contrato OpenAPI](docs/openapi.yaml)
+- [Modelo DynamoDB](docs/dynamodb/data-model.md)
+- [Padrões de acesso](docs/dynamodb/access-patterns.md)
+- [Transação e idempotência](docs/dynamodb/transaction-spec.md)
+- [Segurança e observabilidade](docs/security/security-and-observability.md)
+- [Cenários de aceitação](docs/tests/acceptance-scenarios.md)
+- [Matriz de rastreabilidade](docs/mapping/traceability.md)
+- [ADRs propostos](docs/decisions/)
 
-- Cada diagrama mantém um único nível e um escopo definido?
-- Os limites e as responsabilidades estão claros?
-- A integração externa está identificada?
-- O fluxo comportamental mostra sucesso e falha?
-- A regra que impede estoque negativo está representada?
-- A persistência de saldo e movimentação evita atualização parcial?
-- Alguma tecnologia foi assumida sem decisão explícita?
-- As lacunas continuam visíveis e atualizadas?
+## Validação local
+
+Com Python 3 e PyYAML instalados:
+
+```bash
+python -m pip install pyyaml
+python scripts/validate_architecture.py
+```
+
+O mesmo validador é executado pelo GitHub Actions para conferir JSON, YAML, referências locais, links Markdown e sincronismo entre os diagramas exibidos neste README e seus arquivos `.mmd`.
 
 ## Status
 
-**Discovery inicial — documentação sujeita a revisão antes da implementação.**
+**Arquitetura proposta — aguardando revisão e aceite humano antes da implementação.**

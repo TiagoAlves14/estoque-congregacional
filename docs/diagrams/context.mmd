@@ -1,0 +1,8 @@
+flowchart LR
+    responsavel["Responsável pelo estoque"]
+    sistema["Estoque Congregacional"]
+    identidade["Serviço de identidade — externo"]
+
+    responsavel -->|Gerencia produtos e movimentações| sistema
+    sistema -->|Autentica e autoriza usuários| identidade
+

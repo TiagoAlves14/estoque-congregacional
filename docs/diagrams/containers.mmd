@@ -1,0 +1,21 @@
+flowchart TB
+    usuario["Responsável pelo estoque"]
+    cognito["Amazon Cognito — externo"]
+
+    subgraph sistema["Estoque Congregacional"]
+        web["Aplicação Web — React SPA"]
+        gateway["API HTTP — API Gateway"]
+        backend["Aplicação de Estoque — AWS Lambda"]
+        banco[("Tabela de Estoque — DynamoDB")]
+        observabilidade["Observabilidade — CloudWatch"]
+    end
+
+    usuario -->|Usa via HTTPS| web
+    web -->|Autentica com PKCE| cognito
+    web -->|Envia JWT e JSON via HTTPS| gateway
+    gateway -.->|Valida JWT| cognito
+    gateway -->|Encaminha requisição autorizada| backend
+    backend -->|Lê e grava dados| banco
+    gateway -->|Publica métricas e logs| observabilidade
+    backend -->|Publica métricas e logs| observabilidade
+

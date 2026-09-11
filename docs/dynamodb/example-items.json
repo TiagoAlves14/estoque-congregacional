@@ -1,0 +1,49 @@
+[
+  {
+    "PK": "PRODUCT#018f6f6e-6f5b-7d40-9ac0-111111111111",
+    "SK": "METADATA",
+    "entityType": "PRODUCT",
+    "id": "018f6f6e-6f5b-7d40-9ac0-111111111111",
+    "name": "Copo descartável 200 ml",
+    "normalizedName": "copo descartavel 200 ml",
+    "category": "DESCARTAVEIS",
+    "unit": "PACKAGE",
+    "currentStock": 10,
+    "minimumStock": 5,
+    "status": "ACTIVE",
+    "version": 7,
+    "GSI1PK": "CATALOG",
+    "GSI1SK": "NAME#copo descartavel 200 ml#018f6f6e-6f5b-7d40-9ac0-111111111111",
+    "createdAt": "2026-09-01T12:00:00.000Z",
+    "updatedAt": "2026-09-11T03:00:00.000Z"
+  },
+  {
+    "PK": "PRODUCT#018f6f6e-6f5b-7d40-9ac0-111111111111",
+    "SK": "MOVEMENT#2026-09-11T03:00:00.000Z#01906666-7777-7888-8999-222222222222",
+    "entityType": "MOVEMENT",
+    "id": "01906666-7777-7888-8999-222222222222",
+    "productId": "018f6f6e-6f5b-7d40-9ac0-111111111111",
+    "movementType": "EXIT",
+    "quantity": 2,
+    "resultingStock": 10,
+    "reason": "Uso no evento mensal",
+    "performedBy": "user-sub-ficticio",
+    "idempotencyKey": "01907777-8888-7999-8aaa-333333333333",
+    "createdAt": "2026-09-11T03:00:00.000Z"
+  },
+  {
+    "PK": "IDEMPOTENCY#user-sub-ficticio",
+    "SK": "KEY#01907777-8888-7999-8aaa-333333333333",
+    "entityType": "IDEMPOTENCY",
+    "requestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "movementId": "01906666-7777-7888-8999-222222222222",
+    "responseStatus": 201,
+    "responseBody": {
+      "movementId": "01906666-7777-7888-8999-222222222222",
+      "resultingStock": 10
+    },
+    "createdAt": "2026-09-11T03:00:00.000Z",
+    "expiresAt": 0
+  }
+]
+

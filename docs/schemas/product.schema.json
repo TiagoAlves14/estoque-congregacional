@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://estoque-congregacional.example/schemas/product.schema.json",
+  "title": "Product",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "name",
+    "category",
+    "unit",
+    "currentStock",
+    "minimumStock",
+    "lowStock",
+    "status",
+    "version",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60
+    },
+    "unit": {
+      "type": "string",
+      "enum": ["UNIT", "PACKAGE", "LITER", "KILOGRAM"]
+    },
+    "currentStock": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "minimumStock": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "lowStock": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ACTIVE", "INACTIVE"]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
+

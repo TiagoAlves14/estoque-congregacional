@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://estoque-congregacional.example/schemas/stock-movement.schema.json",
+  "title": "StockMovement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "productId",
+    "type",
+    "quantity",
+    "resultingStock",
+    "reason",
+    "performedBy",
+    "createdAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "productId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["ENTRY", "EXIT"]
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "resultingStock": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "performedBy": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
+

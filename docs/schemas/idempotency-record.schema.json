@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://estoque-congregacional.example/schemas/idempotency-record.schema.json",
+  "title": "IdempotencyRecord",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "actorId",
+    "key",
+    "requestHash",
+    "movementId",
+    "responseStatus",
+    "responseBody",
+    "createdAt",
+    "expiresAt"
+  ],
+  "properties": {
+    "actorId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128
+    },
+    "requestHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "movementId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "responseStatus": {
+      "type": "integer",
+      "minimum": 200,
+      "maximum": 599
+    },
+    "responseBody": {
+      "type": "object"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expiresAt": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}
+
